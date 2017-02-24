@@ -1,0 +1,105 @@
+# Recovery Information
+
+enum color
+  | Red
+  | Green
+
+
+enum orientation
+  | Vertical
+  | Horizontal
+
+type stack
+  is grabbable
+  is visible
+  is sizable
+  is half_orientable
+
+  # Gives us:
+  # pred know[stack; color=C]
+  #   C color
+  color color
+  # The heading such that the heading 90 degrees counterclockwise is pointing
+  # counterclockwise with respect to the tower.
+  heading angle
+  orientation orientation
+  altitude length
+
+pred removed[S]
+  S stack
+
+pred on_table[S]
+  S stack
+
+pred correctly_placed[S]
+  S stack
+
+
+type region
+  is visible
+
+  color color
+
+
+# Taken from constants/config.py, but not accurate, because these are actually
+# dive altitudes for the sub, not altitudes of the objects.
+const STACK_DIVE_ALTITUDE : length = 1.8m
+const VERT_STACK_ALTITUDE : length = 1.33m
+const HORIZ_STACK_ALTITUDE : length = 1.3m
+const TOWER_ALTITUDE : length = 1.3m
+
+
+# Composite object -- some logic for specifying when we see it based on how
+# many stacks we see.
+type tower
+  is visible
+  is sizable
+  altitude length
+
+object Tower
+  is tower
+  length = TOWER_ALTITUDE
+
+pred surfacing_above[T]
+  T tower
+
+
+object VertRedStack
+  is stack
+  # Translates into:
+  # ⊤ → know[VertRedStack; color=Red]
+  altitude = FLOOR_DEPTH - VERT_STACK_ALTITUDE
+  color = Red
+  orientation = Vertical
+
+object HorizRedStack
+  is stack
+  altitude = FLOOR_DEPTH - HORIZ_STACK_ALTITUDE
+  color = Red
+  orientation = Horizontal
+
+object VertGreenStack
+  is stack
+  altitude = FLOOR_DEPTH - VERT_STACK_ALTITUDE
+  color = Green
+  orientation = Vertical
+
+object HorizGreenStack
+  is stack
+  altitude = FLOOR_DEPTH - HORIZ_STACK_ALTITUDE
+  color = Red
+  orientation = Horizontal
+
+
+object RedRegion
+  is region
+  color = Red
+
+object GreenRegion
+  is region
+  color = Green
+
+
+inst
+  # Assumption is that all predicates are false at the start.
+  #not(removed[RedStack1])

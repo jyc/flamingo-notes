@@ -1,0 +1,59 @@
+# Common Actions
+
+act actuate
+  pre ø
+  eff ø
+  inv ø
+  post
+    actuated[A]
+  eta 1s
+  p 100%
+
+rule grab
+  X grabbable
+  if
+    grabbable[X] ∧ (∀ Y grabbable. ¬grabbing[Y])
+  then
+    actuated[GrabActuator] ∧ ¬actuated[UngrabActuator]
+  implies
+    ¬after(actuated[UngrabActuator]) → grabbing[X]
+  p 100%
+
+rule release
+  X grabbable
+  if
+    grabbing[X]
+  then
+    actuated[UngrabActuator]
+  implies
+    ¬grabbing[S]
+  p 100%
+
+act spiral_search
+  V visible ∩ {altitude:length}
+  T thrusts
+  P positions
+  eff
+    - thrusting{T}
+    - ∃ V visible. see[V]
+    - positioned{P}
+  pre
+    positioned{P ∩ V - Sub = (z > 1m)}
+  inv ø
+  post
+    see[V; camera=Downcam]
+  eta λ
+  p 50%
+
+rule return_seach
+  V visible
+  T thrusts
+  P positions
+  C camera
+  if
+    before(see[V; camera=C] ∧ positioned{P})
+  then
+    positioned{P}
+  implies
+    see[V; camera=C]
+  p 75%

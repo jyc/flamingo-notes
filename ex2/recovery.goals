@@ -1,0 +1,30 @@
+# Recovery Goals
+
+goal "Surface with a stack."
+  each S stack
+  do
+    was(grabbing[S] ∧ removed[S] ∧
+        positioned{Sub - Tower ~ (|xy| < 10%fov) ∩
+                   Sub ~ (z = 0m±5%)})
+  # Really need to surface within the octagon for 1000 points.
+  # Looks like we didn't discriminate?
+  for 1000
+
+goal "Drop a stack."
+  each S stack
+  do
+    was(grabbing[S] ∧ removed[S]) ∧
+    ¬grabbing[S]
+  for 200
+
+goal "Place a stack on the table."
+  each S stack
+  do
+    on_table[S]
+  for 500
+
+goal "Place a stack on the table in the correct region."
+  each S stack
+  do
+    correctly_placed[S]
+  for 1000

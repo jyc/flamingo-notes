@@ -1,0 +1,503 @@
+\documentclass{beamer}
+
+\usepackage{listings}
+\lstset{basicstyle=\ttfamily}
+
+\begin{document}
+\title{Flamingo Overview}   
+\author{Jonathan Chan, Alex Ozer} 
+\date{Thursday, February 23, 2017} 
+
+\frame{\titlepage} 
+
+
+\begin{frame}
+\frametitle{Introduction}
+\begin{itemize}
+\item Mission code is almost entirely:
+\begin{itemize}
+\item bookkeeping,
+\item logging, or
+\item logic.
+\end{itemize} 
+\item Much more bookeeping and logging than logic. 
+\item Errors in bookkeeping (and logging) are bad, and 
+\item lots of the first two make critical logic hard to see.
+\end{itemize}
+\end{frame}
+
+
+\begin{frame}[fragile]
+\frametitle{Example: Logic}
+\tiny
+\lstset{moredelim=**[is][\color{red}]{@}{@}}
+\begin{lstlisting}
+covered_cutout = self.get_covered_cutout()
+@if covered_cutout == None or self.num_tries['remove_cover'] >= 2:@
+    self.state = self.State.target_uncovered_cutout
+
+    if Torpedoes.lost_target:
+        Torpedoes.lost_target = False
+    else:
+        Torpedoes.target = self.get_uncovered_cutout()
+
+    @if self.target == None:@
+        self.logi("Can't find a target cutout! Falling back to positional targeting")
+        self.state = self.State.target_cutout_fallback
+        @self.task = TargetCutoutFallback()@
+    else:
+        @self.task = ShootCutout()@
+else:
+    Torpedoes.target = covered_cutout
+    self.state = self.State.remove_cover
+    @self.task = RemoveCover()@
+
+\end{lstlisting}
+\end{frame}
+
+
+\begin{frame}[fragile]
+\frametitle{Example: Logic + Bookkeeping}
+\tiny
+\lstset{moredelim=**[is][\color{red}]{@}{@}}
+\lstset{moredelim=**[is][\color{blue}]{?}{?}}
+\begin{lstlisting}
+?covered_cutout = self.get_covered_cutout()?
+@if covered_cutout == None or self.num_tries['remove_cover'] >= 2:@
+    ?self.state = self.State.target_uncovered_cutout
+
+    if Torpedoes.lost_target:
+        Torpedoes.lost_target = False
+    else:
+        Torpedoes.target = self.get_uncovered_cutout()?
+
+    @if self.target == None:@
+        self.logi("Can't find a target cutout! Falling back to positional targeting")
+        ?self.state = self.State.target_cutout_fallback?
+        @self.task = TargetCutoutFallback()@
+    @else:@
+        @self.task = ShootCutout()@
+@else:@
+    ?Torpedoes.target = covered_cutout
+    self.state = self.State.remove_cover?
+    @self.task = RemoveCover()@
+
+\end{lstlisting}
+\end{frame}
+
+
+\begin{frame}
+\frametitle{Example: Explanation}
+As written:
+\begin{itemize}
+\item if there are no covered cutouts or we've tried to remove the cover more than twice,
+\item if we can't find a target cutout,
+\begin{itemize}
+\item fall back to positional targeting to target a cutout (i.e. just shoot two torpedoes blindly),
+\item otherwise try to target the cutout we've found and then shoot at it,
+\end{itemize}
+\item otherwise, try to remove a cover.
+\end{itemize}
+
+
+Alternatively:
+``Find an uncovered cutout (following some order) and shoot at it.
+If there is an covered cutout you can uncover it by doing $X$.
+Alternatively, you can shoot blindly (which is less likely to succeed).''
+
+Note that the order is inverted in general.
+\end{frame}
+
+
+\begin{frame}[fragile]
+\frametitle{Extrapolating from the example}
+\begin{itemize}
+\item Most logic is pretty mechanical:
+\begin{lstlisting}
+if (covered_cutout == None or
+    self.num_tries['remove_cover'] >= 2):
+\end{lstlisting}
+\item Most bookkeeping (\verb|self.x = e|) is either:
+\begin{itemize}
+\item passing things on to the next state (i.e. making up for not being able to do \verb|state.first().second()|), 
+\item setting the state, or
+\item setting up retry logic.
+\end{itemize}
+\item Logging ``can't find a target cutout'' inside of:
+\begin{lstlisting}
+if self.target == None:
+    ...
+\end{lstlisting}
+... has to be redundant in some sense.
+\item Idea: have the computer do as much of this as is possible for us!
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Flamingo example}
+\lstset{moredelim=**[is][\color{black}]{@}{@}}
+\lstset{moredelim=**[is][\color{black}]{?}{?}}
+\lstset{moredelim=**[is][\color{black}]{\$}{\$}}
+\lstset{moredelim=**[is][\color{black}]{!}{!}}
+\lstset{moredelim=**[is][\color{black}]{#}{#}}
+\lstset{escapeinside={(*}{*)}}
+\begin{lstlisting}
+(*\textit{goal}*) "Shot small cutouts in order."
+  (*\textit{do}*)
+    as(?shot?[(*\underline{SmallCutoutW}*)],
+       @before@(?shot?[(*\underline{SmallCutoutN}*)] !and!
+              @forall@((*\underline{C}*) cutout,
+                     @not@(?shot?[(*\underline{C}*)]) !or!
+                     (*\underline{C}*) = (*\underline{SmallCutoutN}*))))
+  (*\textit{for}*) 3000
+\end{lstlisting}
+\end{frame}
+
+
+\begin{frame}[fragile]
+\frametitle{Flamingo example (with more symbols)}
+\lstset{basicstyle=\sffamily,columns=flexible,escapeinside={(*}{*)}}}
+\begin{lstlisting}
+(*\textit{goal}*) "Shot small cutouts in order."
+  (*\textit{do}*)
+    (*$\sim$*)((*\texttt{shot}*)[(*\textbf{SmallCutoutW}*)],
+       (*$\uparrow$*)((*\texttt{shot}*)[(*\textbf{SmallCutoutN}*)] &
+         (*$\forall$*) (*\textbf{C}*) cutout. (*$\lnot$*)(*\texttt{shot}*)[(*\textbf{C}*)] (*$\vee$*) (*\textbf{C}*) = (*\textbf{SmallCutoutN}*)))
+  (*\textit{for}*) 3000
+\end{lstlisting}
+\end{frame}
+
+% Ha ha...
+\begin{frame}
+\frametitle{What is Flamingo?}
+\includegraphics[width=\textwidth]{arguably-alive.png}
+\end{frame}
+
+\begin{frame}
+\frametitle{Shakey the Robot}
+\begin{center}
+\includegraphics[height=3in]{shakey.jpg}
+\end{center}
+\end{frame}
+
+\begin{frame}
+\frametitle{What is Flamingo?}
+\begin{itemize}
+\item A STRIPS-like automated planner with some nifty features.
+\item Multiple components working together:
+\begin{itemize}
+\item \textbf{Planner}
+\begin{itemize}
+\item \textbf{Mission planner}: given some high level goals with different point values, requirements, probabilities of success, and a time limit, what's the plan that gets us as many points as possible?  (some subtlety here: more on this later)
+
+\item \textbf{Motion planner}: given some position and orientation relative to some object, what's the best way to achieve that?
+
+\end{itemize}
+\item \textbf{Mission controller}: calls planners and adapts to action failures.
+
+\item \textbf{Knowledge base}: what do we think we know about the world?
+\end{itemize}
+
+\item Goal is to create something that will last 4+ years, so careful design is important.
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Plan for this presentation}
+\begin{itemize}
+\item Not enough time to talk about everything.
+
+\item A high-level overview of core ideas and potential difficulties.
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Simple Predicates}
+\lstset{moredelim=**[is][\color{red}]{@}{@}}
+\lstset{escapeinside={(*}{*)}}
+\begin{lstlisting}
+(*\textit{goal}*) "Shot small cutouts in order."
+  (*\textit{do}*)
+    before(@shot[(*\underline{SmallCutoutN}*)@] and
+           forall((*\underline{C}*) cutout, not(@shot[(*\underline{C}*)]@) or
+                  (*\underline{C}*) = (*\underline{SmallCutoutN}*))) and
+    @shot[(*\underline{SmallCutoutW}*)]@
+  (*\textit{for}*) 3000
+\end{lstlisting}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Simple Predicates}
+\begin{itemize}
+\item Examples:
+\begin{itemize}
+\item \verb|shot[SmallCutoutN]|: ``We shot at \texttt{SmallCutoutN} at some point in the past.''
+\item \verb|grabbing[VertGreenStack]|: ``We are grabbing \texttt{VertGreenStack}.''
+\end{itemize}
+\item A \textit{predicate} is a symbol (e.g. \verb|shot|, \verb|grabbed|), and some tuple of argument types (the predicate's type).
+\item An \textit{atomic formula} is made up a predicate symbol followed by some number of expressions corresponding to the type of the predicate.
+\item At any given time, what the mission controller ``knows'' generates a valuation in which each atomic formula is either true or false. (some subtlety here: more on this later)
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Simple Predicates}
+Here's what the definition of the \verb|shot| predicate (and related types and objects) might look like:
+\begin{lstlisting}
+type cutout
+  is visible
+  is sizable
+  ...
+
+object SmallCutoutN
+  is cutout
+  ...
+
+pred shot[T]
+  T cutout
+\end{lstlisting}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Goals}
+Idea: use formulas to define goals, and sets of goals (with point values) to define missions.
+\lstset{moredelim=**[is][\color{red}]{@}{@}}
+\lstset{escapeinside={(*}{*)}}
+\begin{lstlisting}
+(*\color{red}\textit{goal}*) @"Shot small cutouts in order."@
+  (*\color{red}\textit{do}*)
+    before(shot[(*\underline{SmallCutoutN}*)] and
+           forall((*\underline{C}*) cutout, not(shot[(*\underline{C}*)]) or
+                  (*\underline{C}*) = (*\underline{SmallCutoutN}*))) and
+    shot[(*\underline{SmallCutoutW}*)]
+  (*\color{red}\textit{for}*) @3000@
+\end{lstlisting}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Actions and Rules}
+
+\begin{tabular}[t]{l l}
+\begin{lstlisting}
+act actuate
+  pre nil
+  eff nil
+  inv nil
+  post
+    actuated[A]
+  eta 1s
+  p 100%
+...
+\end{lstlisting}
+&
+\begin{lstlisting}
+rule release
+  X grabbable
+  if
+    grabbing[X]
+  then
+    actuated[UngrabActuator]
+  implies
+    ¬grabbing[S]
+  p 100%
+\end{lstlisting}
+\end{tabular}
+\end{frame}
+
+\begin{frame}
+\frametitle{Actions and Rules}
+\item An \textit{action} is a set consisting of the following:
+\begin{itemize}
+\item \textit{preconditions}: formulas which must be satisfied in order for the action to be \textit{applicable},
+\item \textit{effects}: formulas which \textit{may} become true \textit{during} the execution of the action (this is tricky! And unfortunately beyond the scope of this presentation),
+\item \textit{invariants}: formulas which \textit{must} remain true \textit{during} the execution of the action,
+\item \textit{postconditions}: formulas which the action \textit{asserts} will become true following its completion,
+\item a \textit{time estimate}: an estimate of how long the action will take,
+\item a \textit{success probability}: an estimate of how likely the action is to succeed (the last two form perhaps a distribution), and
+\item an \textit{implementation}.
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Actions and Rules}
+An action describes a \textit{procedure} by which something can be accomplished.
+\begin{lstlisting}
+act actuate
+  pre nil
+  eff nil
+  inv nil
+  post
+    actuated[A]
+  eta 1s
+  p 100%
+\end{lstlisting}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Actions and Rules}
+\textit{Rules} are preferred to actions, and describe procedures that can be themselves described in terms of \textit{sub-goals}.
+\begin{lstlisting}
+rule release
+  X grabbable
+  if
+    grabbing[X]
+  then
+    actuated[UngrabActuator]
+  implies
+    not(grabbing[S])
+  p 100%
+\end{lstlisting}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Objects and Types}
+\begin{lstlisting}
+type stack
+  is grabbable
+  is visible
+  is sizable
+  is half_orientable
+
+  # Gives us:
+  # pred know[stack; color=C]
+  #   C color
+  color color
+\end{lstlisting}
+\begin{itemize}
+\item An \textit{object} is a symbol associated with some collection of facts.
+\item Essentially syntactic sugar for the \verb|know| predicate.
+\item Important: means that all of the rest of what we're about to say about formulas applies to \verb|know| (object information) as well.
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Quantifiers}
+In the recovery mission, we only want to:
+\begin{itemize}
+\item only remove horizontal stacks if all vertical stacks have been removed, and
+\item only decide on what horizontal stack to remove if there is some unremoved stack that we know is horizontal.
+\end{itemize}
+\lstset{moredelim=**[is][\color{red}]{@}{@}}
+\begin{lstlisting}
+act choose_horizontal_stack
+  ...
+  pre
+    @exists@(S stack,
+           not(removed[S]) and
+           know[S; orientation=Horizontal]) and
+    @forall@(S stack,
+           know[S; orientation=Vertical]
+           => removed[S])
+  ...
+\end{lstlisting}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Logical operators}
+\lstset{moredelim=**[is][\color{red}]{@}{@}}
+Logical operators allow us to create compound formulas out of atomic formulas.
+\begin{lstlisting}
+act choose_horizontal_stack
+  ...
+  pre
+    exists(S stack,
+           not(removed[S]) @and@
+           know[S; orientation=Horizontal]) @and@
+    forall(S stack,
+           know[S; orientation=Vertical]
+           @=>@ removed[S])
+  ...
+\end{lstlisting}
+
+We have the standard operators from first-order logic: \verb|and|, \verb|or|, \verb|=>| (implication), and \verb|not|.
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Temporal operators}
+\begin{itemize}
+\item An action can cause some formula's value to change...
+\item ... but we might not want some things to change (or we might only care if some things have been true in the past).
+\item A formula is evaluated in some temporal context (e.g. $t = 1487891636$).
+\item We define three temporal operators:
+\begin{itemize}
+\item \verb|as(a, b)| is true when \verb|a| is true, and at some time that \verb|a| became true, \verb|b| was also true.
+\item \verb|before(e)| is true when \verb|e| was true at some $t' \leq t$.
+\item \verb|after(e)| is true when \verb|e| becomes true at some $t' \geq t$.
+\end{itemize}
+\item Time is lexically scoped (haha).
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Temporal operators}
+\lstset{moredelim=**[is][\color{red}]{@}{@}}
+\lstset{escapeinside={(*}{*)}}
+\begin{lstlisting}
+rule drop_on_region
+  if
+    exists(S stack, R region, C color,
+           ...)
+  then
+    not(grabbing[S])
+  implies
+    not(@after((thrusting{>= 10 N} and
+               positioned{R - Sub =
+                          (|xyz| < 1m)}) or
+               positioned{R - Sub =
+                          (|xyz| < 0.5m)})@)
+    => on_table[S]
+  p 100%
+\end{lstlisting}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Algebraic predicates}
+\begin{itemize}
+\item Predicates so far have been applied to atomic objects; what about continuous values? 
+\lstset{escapeinside={(*}{*)}}
+\begin{lstlisting}
+thrusting{>= 10 N} and
+positioned{r - Sub = (|xyz| < 1m)})
+\end{lstlisting}
+\item How do we plan for compound formulas with continuous values? 
+\item Complex predicates (within curly brackets) small languages to describe continuous constraints. 
+\item Pull conjunctions and disjunctions into compound formulas....
+\item ... then we can dispatch \verb|positioned| formulas, for example, to the motion planner as a single constraint.
+\item {\tiny Algebraic because the predicate is acting as a homomorphism between Boolean algebras.}
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Verifiers}
+\begin{itemize}
+\item How do we know whether an action actually succeeded?
+\item \verb|verifiable(e)| is true when \verb|e| is currently believed to be \textit{verifiable}.
+\end{itemize}
+\begin{lstlisting}
+rule position_above_tower_to_verify
+  S stack
+  if
+    positioned{Tower - Sub =
+               (|xy| < 10%fov, z > 2m, z < 3m)}
+  then
+    verifiable(removed[S])
+  p 80%
+\end{lstlisting}
+\begin{itemize}
+\item Verifiers implementations run in the background, returning whether relevant atomic formulas with \verb|true|, \verb|false|, or \verb|unknown|.
+\item When to run verifiers (how much to trust actions?) characterizes part of the behavior of the mission controller with regard to risk.
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Other Topics}
+\begin{itemize}
+\item Mission planning \& re-planning.
+\item Motion planning.
+\item Learning.
+\item Partial ordering of estimates.
+\end{itemize}
+\end{frame}
+
+\end{document}
+

@@ -1,0 +1,94 @@
+post positioned{P}
+have positioned{P'} => goal
+then P = P'
+
+post not(positioned{P})
+have positioned{P'} => goal
+then P = not(P')
+
+positioned is a homomorphism?!
+
+post positioned{P} & positioned{G}
+have positioned{P'} => goal
+then P & G = P'
+
+(only allow one parameter per eff clause)
+
+post positioned{P}
+have not(positioned{P'}) => goal
+then P = not(P')
+
+eff thrusting{K}
+eff positioned{P}
+have not(was(thrusting{> K'} & positioned{P'})) => goal
+then K = not(> K') = ≤ K'
+     P = not(P')
+
+split?
+
+thrusting{> K'} & positioned{not P'}
+thrusting{≤ K'} & positioned{P'}
+thrusting{≤ K'} & positioned{not P'}
+
+
+what if we want to move out of the region slowly, then afterwards move quickly?
+
+border(not P', P')
+
+then which point do we choose to go to?
+potentially infiitely many points on the boundary we could go to
+
+motion planner proposal looks at our current goals
+e.g. we have someting, now we want on_table
+we see that we can get p[X] => on_table
+now our goals are p[X] and whatever previous goals we had
+let's say this ends up to be p[X] & positioned{P}
+proposal takes ALL of the position constraints and creates an action bid
+
+what about searches though?
+search could go a lot faster (or maybe only possible) depending on position constraint?
+
+not(was(thrusting{> K'} & positioned{P})) & see[S]
+
+we want to use a search task that achieves see[S]
+try the effect combinations
+
+thrusting{> K'} & positioned{not P'}
+thrusting{≤ K'} & positioned{P'}
+thrusting{≤ K'} & positioned{not P'}
+
+maybe we can do a search with thrusting{> K} & positioned{not P'} but the precondition is that we be in not P'
+
+but the not(was(positioned{P})) is messing with the effects
+
+
+
+i.e. positioned{not P'} | thrusting{≤ K'}
+
+see which constraints are best?
+
+programmatic ETA, confidence
+
+eff thrusting{K}
+eff positioned{P}
+have not(was(thrusting{> K'} | positioned{P'})) => goal
+then K = not(> K') = ≤ K'
+     P = not(P')
+
+not(was(f{A} & g{B}) & was(h{C}))
+not(was(f{A} & g{B})) | not(was(h{C}))
+never(f{A} & g{B}) | never(h{C})
+always(f{not A} & g{not B}) | always(h{not C})
+
+not(was(x)) = never(x)
+
+so either restrict h{not C} and everything else can be whatever, or restrict (f{not A} | g{not B})
+
+always(A | B) try restrict A, try restrict B, see which is better
+  but keep always(A | B) (i.e. can make a different choice later)
+always(A) | always(B) 
+
+what is our strategy for
+exists A a. exists B b. with[f(A, B)] & ...
+find f^(-1)(true)
+goal is to accomplish any one of those pairs of arguments

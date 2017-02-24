@@ -1,0 +1,16 @@
+type camera
+  width : int
+  height : int
+  
+type visible : object
+  x : int!
+  y : int!
+  cam : camera!
+
+type sighting
+  x : int
+  y : int
+  cam : camera
+
+pred see[X; at=S]
+  X visible

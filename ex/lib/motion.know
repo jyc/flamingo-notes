@@ -1,0 +1,4 @@
+type marker
+  x : float
+  y : float
+  z : float

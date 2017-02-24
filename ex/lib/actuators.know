@@ -1,0 +1,12 @@
+type dropper
+  actuator : int
+  x : float
+  y : float
+  z : float
+
+pred dropping[X]
+  volatile
+  X dropper
+
+val dropper1 : dropper
+val dropper2 : dropper

@@ -1,0 +1,183 @@
+<pre class='metadata'>
+Title: Flamingo
+Shortname: flamingo
+Level: 1
+Status: DREAM
+Group: Flamingo
+URL: 
+Editor: Jonathan Chan
+Editor: Alex Ozer
+Boilerplate: omit footer
+Abstract: A declarative system for robust missions.
+</pre>
+
+<div boilerplate="copyright">
+<a rel="license" href="http://creativecommons.org/licenses/by-sa/3.0/us/"><img alt="Creative Commons License" style="border-width:0" src="https://i.creativecommons.org/l/by-sa/3.0/us/80x15.png" /></a>&nbsp;This work is licensed under a <a rel="license" href="http://creativecommons.org/licenses/by-sa/3.0/us/">Creative Commons Attribution-ShareAlike 3.0 United States License</a>.<br />
+Copyright © 2016 The Flamingo Authors.
+<br />
+
+Introduction {#intro}
+============
+
+This is the work-in-progress documentation/specification for Flamingo, a declarative system for robust missions.
+Flamingo is developed with the experience of writing mission code for <a href="http://cuauv.org">CUAUV</a>, an undergraduate project team at Cornell that builds an autonomous underwater vehicle every year to compete in the <a href="http://www.auvsi.org/foundation/competitions/competition-central/robosub">AUVSI RoboSub</a>  competition.
+
+At the moment, this is not intended to document how Flamingo <i>should</i> be, but rather to show how Flamingo <i>might</i> be, in order to provide a reference for debate.
+
+Overview {#overview}
+========
+
+Flamingo is composed of three core systems:
+
+    1. a [=planner=], which takes planner header, action, and goal files then plans and executes missions,
+    2. <a href="#action-impl">action</a> and <a href="#predicate-impl">predicate</a> implementations, an
+    3. a knowledge base, which takes world description files and incorporates them with knowledge obtained at runtime (composed through a SLAM system, directly from cameras, etc.) to:
+        1.  ahead of time, generate action and predicate stubs,
+
+            Issue: How much should be generated? What sort of knowledge occur often enough to make it worth writing codegen for stubs, but not often enough for us to already have general action/implementation implementations (or are these not possible in some cases)?
+
+        2.  at run time, provide information to action and predicate implementations.
+
+            Issue: If we provide all of the information, then individual action and predicate implementations will have to make decisions about how to filter unfiltered information, or how to choose between sources.
+            This will be less bad than the current situations, because most users will not be writing action and predicate implementations.
+            However, is it possible to abstract this to the knowledge base for consistency and robustness, just like abstracting error handling to Flamingo increases consistency and robustness?
+            I bet that there are fancy SLAM systems for handling this sort of information (or it may turn out that the information we care about filtering can already be stored in our SLAM system).
+
+Planner {#planner-section}
+=======
+
+## Overview ## {#planner-overview}
+
+The <dfn>planner</dfn> is the program that plans and executes missions given goals to achieve, information on the environment and how to observe it, and information on what can be done and how to do it.
+
+The planning system is heavily inspired by the STRIPS automated planner developed by Fikes and Nilsson in 1971 [[Fikes-Nilsson-1971]], and by the AI for the video game F.E.A.R. [[Orkin-2006]].
+More directly, the planning system is the continuation of work started in the Simulation Project Revised Technical Report [[Revised-Technical-Report]].
+
+Things in the world are expressed as [=objects=], which are represented as symbols.
+For example, we could represent a red buoy by the <code>red_buoy</code> symbol.
+Objects may have information associated with them in the [=knowledge base=].
+For example, a red buoy might have an estimated altitude as well as a shared memory group that the vision algorithm for locating it will fill.
+
+Observable information is expressed as [=predicates=], akin to STRIPS <i>operators</i>.
+We might have a predicate <code>ForwardVisible(camera_visible)</code> which takes an object that we have a vision algorithm for (represented by type <code>camera_visible</code>) and returns true iff that object is visible in the forward camera.
+
+[=Clauses=] are applications of predicates to objects: a clause is either satisfied or unsatisfied (true or false), and encodes some information about the world.
+Using the previous two examples, the clause <code>ForwardVisible(red_buoy)</code> will be satisfied iff the <code>red_buoy</code> object is visible in the forward camera.
+Clauses can also contain quantifiers.
+Suppose all buoys have type <code>buoy</code>, and all covers type <code>cover</code>.
+Then we could express seeing all buoys with the clause <code>&forall;x:buoy. ForwardVisible(buoy)</code>, and express seeing (at least) one cover with the clause <code>&exist;x:cover. ForwardVisible(cover)</code>.
+For now, only clauses with a single existential or universal quantifier are supported.
+
+Note: I think this is as complex as clauses need to get for now. We could add more in the future, but then we start to go into theorem prover territory.
+
+The set of goals to achieve is expressed as a set of clauses that should be satisfied.
+
+## Algorithm ## {#algorithm}
+
+<div algorithm="planning algorithm">
+Denote by <var>t<sub>now</var> the current time.
+
+Write |a| &lt;: |b| when the object type |a| is a subtype of the object type |b|, or when the object |a|'s type is a subtype of the object |b|'s type.
+Let <b>|P|</b> be the set of all defined predicates, and <b>|O|</b> be the set of all objects.
+Let <b><var>O'</var></b> be the set of all types of objects.
+Then <b>|C|</b>, the set of all possible clauses, is the union of the sets of ordered sets:
+
+    1. {{|P|, <var>x<sub>1</sub></var>, <var>x<sub>2</sub></var>, ... <var>x<sub>n</sub></var>} : |P| &isin; <b>|P|</b>, &forall;|i|. (<var>x<sub>|i|</sub></var> &isin; (<b>|O|</b> &cup; <b><var>O'</var></b>) and <var>x<sub>|i|</sub></var> &lt;: the type of |i|'th parameter to |P|)}
+    2. {{&forall;, <b>|o|</b>, |P|, <var>x<sub>1</sub></var>, <var>x<sub>2</sub></var>, ..., <var>x<sub>|j|-1</sub></var>, |o|, <var>x<sub>|j|+1</sub></var>, ..., <var>x<sub>n</sub></var>} : |P| &isin; <b>|P|</b>, &forall;|i|. (<var>x<sub>|i|</sub></var> &isin; (<b>|O|</b> &cup; <b><var>O'</var></b>) and <var>x<sub>|i|</sub></var> &lt;: the type of |i|'th parameter to |P|), |o|&nbsp;<:&nbsp;the type of the |j|'th parameter to |P|, |o| &isin; <b>|o|</b>, <b>|o|</b> &sube; <b>|O|</b>}
+    3. {{&exist;, <b>|o|</b>, |P|, <var>x<sub>1</sub></var>, <var>x<sub>2</sub></var>, ..., <var>x<sub>|j|-1</sub></var>, |o|, <var>x<sub>|j|+1</sub></var>, ..., <var>x<sub>n</sub></var>} : |P| &isin; <b>|P|</b>, &forall;|i|. (<var>x<sub>|i|</sub></var> &isin; (<b>|O|</b> &cup; <b><var>O'</var></b>) and <var>x<sub>|i|</sub></var> &lt;: the type of |i|'th parameter to |P|), |o|&nbsp;&lt;:&nbsp;the type of the |j|'th parameter to |P|, |o| &isin; <b>|o|</b>, <b>|o|</b> &sube; <b>|O|</b>}
+
+Then the set of defined actions is a subset of (<i>Names</i> &times; <b>2</b><sup><b><var>C</var></b></sup> &times; <b>2</b><sup><b>|C|</b></sup> &times; <i>Durations</i> &times; <i>Points</i> &times; <b>2</b><sup>{+, -} &times; <b>|C|</b></sup>).
+
+A given action
+(|n|, <b>|c|</b>, <b><var>c<sup>*</sup></var></b>, <var>&Delta;t</var>, |p|, {(<var>&delta;<sub>1</sub></var>, <var>c'<sub>1</sub></var>), (<var>&delta;<sub>2</sub></var>, <var>c'<sub>2</sub></var>), ..., (<var>&delta;<sub>m</sub></var>, <var>c'<sub>m</sub></var>)})
+has name |n|, has preconditions <b>|c|</b>, invariants <b><var>c<sup>*</sup></var></b>, duration <var>&Delta;t</var>, point value |p|, and has as its postcondition that it satisfies each <var>c'<sub>m</sub></var> in an ordered pair (+, <var>c'<sub>m</sub></var>) and causes to no longer be satisfied each <var>c'<sub>m</sub></var> in an ordered pair (-, <var>c'<sub>m</sub></var>).
+
+Denote by <var>G</var> the edge-induced subgraph of the complete graph with vertices <b>2</b><sup><b>|C|</b></sup> with an edge from <var>C<sub>1</sub></var> to <var>C<sub>2</sub></var> iff there exists some action
+<span>(|n|, <b>|c|</b>, <b><var>c<sup>*</sup></var></b>, <var>&Delta;t</var>, |p|, <b><var>c'</var></b> = {(<var>&delta;<sub>1</sub></var>, <var>c'<sub>1</sub></var>), (<var>&delta;<sub>2</sub></var>, <var>c'<sub>2</sub></var>), ..., (<var>&delta;<sub>m</sub></var>, <var>c'<sub>m</sub></var>)})</span>
+such that <b>|c|</b> &cup; <b><var>c<sup>*</sup></var></b> &sube; <var>C<sub>1</sub></var> and <var>C<sub>2</sub></var> &sube; <b><var>c'</var></b>.
+
+Note that a <i>world state</i> is a boolean function from all possible clauses, or a function <b>|C|</b> &rarr; <i>Booleans</i>.
+Equivalently, a world state is the set of satisfied clauses, or a subset of <b>2</b><sup><b>|C|</b></sup>.
+Denote by <var>S<sub>now</sub></var> the current world state.
+
+Let <var>S<sub>goal</sub></var> be the set of goals (clauses).
+Let <var>t<sub>end</sub></var> be the time when the mission must end (e.g. the deadline for a mission run).
+
+Then to execute the planner:
+
+    1. While <var>S<sub>goal</sub></var> contains unsatisfied clauses and <var>t<sub>now</var> &lt; <var>t<sub>end</sub></var>,
+        1.  Let <i>proj</i><sub><i>Duration</i></sub> be the projection 
+            (|n|, <b>|c|</b>, <b><var>c<sup>*</sup></var></b>, <var>&Delta;t</var>, |p|, <b><var>c'</var></b>) &#x27fc; <var>&Delta;t</var>.
+
+            Let <i>proj</i><sub><i>Points</i></sub> be the projection 
+            (|n|, <b>|c|</b>, <b><var>c<sup>*</sup></var></b>, <var>&Delta;t</var>, |p|, <b><var>c'</var></b>) &#x27fc; |p|.
+
+            Find the path <var>c<sub>1</sub></var>, <var>c<sub>2</sub></var>, ..., <var>c<sub>n</sub></var> in <b>|G|</b> from <var>S<sub>now</sub></var> to <var>S<sub>goal</sub></var> that maximizes &Sigma;<sub>i</sub> <i>proj</i><sub><i>Points</i></sub> <var>c<sub>i</sub></var> subject to the constraint &Sigma;<sub>i</sub> <i>proj</i><sub><i>Duration</i></sub> <var>c<sub>i</sub></var> &leq; <var>t<sub>end</sub></var> - <var>t<sub>now</sub></var>.
+
+            Note: This is the Knapsack Problem in a graph, which is NP-hard! But I am almost certain that the actual running time will be not too long--
+            if it is too long, we can approximate by using Dijkstra's on a graph where edges are "point density" <var>p</var>&nbsp;/&nbsp;<var>&Delta;t</var>, which I <i>believe</i> (but haven't proved) gives a 2-approximation.
+
+</div>
+
+Objects {#objects-section}
+=======
+
+An <dfn>object</dfn>
+
+Knowledge Base {#knowledge-base-section}
+==============
+
+The <dfn>knowledge base</dfn>
+
+Actions {#actions-section}
+=======
+
+An <dfn>action</dfn> is 
+
+## Implementations ## {#action-impl}
+
+Predicates {#predicates-section}
+==========
+
+A <dfn>predicate</dfn> is a function from world states (implicitly) and parameter types (explicitly) to booleans.
+
+Clauses {#clauses-section}
+=======
+
+A <dfn>clause</dfn>
+
+## Implementations ## {#predicate-impl}
+
+<!-- Omit the footer boilerplate, which normally shows a section on Conformance
+     (which isn't relevant, as this isn't a specification). -->
+<div boilerplate="footer">
+</div>
+
+<pre class="biblio">
+{
+    "Fikes-Nilsson-1971": {
+        "authors": [
+            "Richard E. Fikes",
+            "Nils J. Nilsson"
+        ],
+        "href": "http://ai.stanford.edu/~nilsson/OnlinePubs-Nils/PublishedPapers/strips.pdf",
+        "title": "STRIPS: A New Approach to the Application of Theorem Proving to Problem Solving"
+    },
+    "Orkin-2006": {
+        "authors": [
+            "Jeff Orkin"
+        ],
+        "href": "http://alumni.media.mit.edu/~jorkin/gdc2006_orkin_jeff_fear.pdf",
+        "title": "Three States and a Plan: The A.I. of F.E.A.R"
+    },
+    "Revised-Technical-Report": {
+        "authors": [
+            "Jonathan Chan"
+        ],
+        "href": "http://eqv.io/dl/simulation_jyc57_sp2016.pdf",
+        "title": "Simulation Project Revised Technical Report"
+    }
+}
+</pre>
+
+<!-- vim: set sts=4 ts=4 et sw=4 : -->

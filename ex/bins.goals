@@ -1,0 +1,15 @@
+goal dropped_primary
+  req
+    was(dropping[D] &&
+        positioned[above(D, banana)]
+        oriented[within((h, p, r), (0, 0, 0), 10%)])
+      D dropper
+  value 100
+
+goal dropped_secondary
+  req
+    was(dropping[D] &&
+        positioned[above(D, lightning) * within(z, DROP_DEPTH, 10%)] &&
+        oriented[within((h, p, r), (0, 0, 0), 10%))
+      D dropper
+  value 100

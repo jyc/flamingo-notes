@@ -1,0 +1,48 @@
+# Common Information
+
+type grabbable
+
+pred grabbing[G]
+  G grabbable
+
+
+type actuator
+
+pred actuated[A]
+  A actuator
+
+
+enum camera
+  | Forecam
+  | Downcam
+
+record image_position
+  x image_length
+  y image_length
+
+
+type visible
+
+pred see[V; position=P, camera=C]
+  V visible
+  P image_position
+  C camera
+
+
+type sizable
+
+pred see[S; size=L, camera=C]
+  S sizable
+  L image_length
+  C camera
+
+
+type half_orientable
+
+pred see[O; half_heading=A, camera=C]
+  O half_orientable
+  A angle
+  C camera
+
+
+const FLOOR_DEPTH : length = 10m

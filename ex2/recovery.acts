@@ -1,0 +1,158 @@
+# Recovery Actions
+
+act choose_vertical_stack
+  C color
+  H angle
+  eff ø
+  pre
+    ∃ S stack. ¬removed[S] ∧ know[S; orientation=Vertical]
+  inv
+    positioned{Tower - Sub ~ (|xy| < 10%fov, z > 2m, z < 3m)}
+  post
+    ∃ S stack.
+    see[S] ∧ know[S; orientation=Vertical, color=C] ∧
+    ((¬removed[S] ∧
+      positioned{S - Grabber ~ (|xyz| < 5cm)})
+     → grabbable[S])
+  eta 1s
+  p 100%
+
+act choose_horizontal_stack
+  H angle
+  C color
+  eff ø
+  pre
+    (∃ S stack. ¬removed[S] ∧ know[S; orientation=Horizontal]) ∧
+    (∀ S stack. know[S; orientation=Vertical] → removed[S])
+  inv
+    positioned{Tower - Sub ~ (|xy| < 10%fov, z > 2m, z < 3m)}
+  post
+    ∃ S stack.
+    see[S] ∧ know[S; orientation=Horizontal, color=C, heading=H] ∧
+    ((¬removed[S] ∧
+      positioned{S - Grabber ~ (|xyz| < 5cm, |h| < 10deg)})
+     → grabbable[S])
+  eta 1s
+  p 100%
+
+rule position_above_tower_to_verify_stack_removal
+  S stack
+  if
+    positioned{Tower - Sub ~ (|xy| < 10%fov, z > 2m, z < 3m)}
+  then
+    verifiable(removed[S])
+  p 80%
+
+act position_to_grab_horizontal_stack
+  S stack
+  T thrusts
+  P positions
+  eff
+    - thrusting{T}
+    - ∃ V visible. see[V]
+    - positioned{P}
+  pre
+    know[S; heading=H]
+  inv
+    recently(see[S], 5s)
+  post
+    positioned{S - Grabber ~ (|xyz| < 5cm, |h| < 10deg)}
+  eta 10s
+  p 80%
+
+act position_to_grab_vertical_stack
+  S stack
+  T thrusts
+  P positions
+  eff
+    - thrusting{T}
+    - ∃ V visible. see[V]
+    - positioned{P}
+  pre ø
+  inv
+    recently(see[S], 5s)
+  post
+    positioned{S - Grabber ~ (|xyz| < 5cm)}
+  eta 10s
+  p 80%
+
+rule position_to_grab_stack_magic
+  S stack
+  H angle
+  C color
+  if 
+    # 5% of the way to FOV
+    # tan(FOV/2) = w/d
+    # tan(ANG) = x/d
+    # d = w/tan(FOV/2)
+    # ANG=arctan(xtan(FOV/2)/w)
+    # % = ANG/FOV ⅹ 100%
+    know[S; color=C] ;
+    positioned{S - Sub ~ (|xy| < 5%fov)} ;
+    # Go down and possibly precisely align to stack
+    positioned{hold ∩ Sub ~ (z = STACK_DIVE_ALTITUDE)} ;
+    if know[S; heading=H]
+      positioned{hold ∩ S - Sub ~ (|h| < 10deg)} ;
+    # Apply offset
+    positioned{hold ∩ Sub + sub(x = -0.04064m ± 2%, y = 0.1m ± 2%)} ;
+    if know[S; color=Red]
+      positioned{hold ∩ Grabber ~ (z = RED_STACK_ALTITUDE)} ;
+    else
+      positioned{hold ∩ Grabber ~ (z = GREEN_STACK_ALTITUDE)}
+  then
+    positioned{hold ∩ Sub - Sub' ~ sub(y ≥ SCOOCH_LENGTH ± 10%)}
+  implies
+    ¬see[S] ∧ positioned{S - Grabber ~ (|xyz| < 5cm, |h| < 10deg)}
+  p 75%
+
+rule remove_horizontal_stack
+  S stack
+  if
+    know[S; orientation=Horizontal] ∧
+    grabbing[S] ∧ ¬removed[S]
+  then
+    positioned{Sub - Sub' ~ sub(y = 0.4m)}
+  implies
+    ⊤ → removed[S]
+  p 75%
+
+rule remove_vertical_stack
+  S stack
+  if
+    know[S; orientation=Vertical] ∧
+    grabbing[S] ∧ ¬removed[S]
+  then
+    positioned{Sub - Sub' ~ (z = 0.4m)}
+  implies
+    ⊤ → removed[S]
+  p 75%
+
+rule drop_on_region
+  if
+    ∃ S stack, R region, C color.
+    know[S; color=C] ∧
+    grabbing[S] ∧ removed[S] ∧
+    positioned{R - GrabPosition = (z = 0.5m±10%, |xy| < 10%fov)}
+  then
+    ¬grabbing[S]
+  implies
+    ¬after((thrusting{≥ 10 N} ∧
+           positioned{R - Sub = (|xyz| < 1m)}) ∨
+           positioned{R - Sub = (|xyz| < 0.5m)})
+    → on_table[S]
+  p 100%
+    
+rule drop_on_correct_region
+  if
+    ∃ S stack, R region, C color.
+    know[S; color=C] ∧ know[R; color=C] ∧
+    grabbing[S] ∧ removed[S] ∧
+    positioned{R - GrabPosition = (z = 0.5m±10%, |xy| < 10%fov)}
+  then
+    ¬grabbing[S]
+  implies
+    ¬after((thrusting{≥ 10 N} ∧
+           positioned{R - Sub = (|xyz| < 1m)}) ∨
+           positioned{R - Sub = (|xyz| < 0.5m)})
+    → (correctly_placed[S] ∧ on_table[S])
+  p 100%

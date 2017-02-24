@@ -1,0 +1,48 @@
+act drop_dropper[X]
+  X dropper
+  pre
+    nil
+  inv
+    nil
+  post
+    dropped[X]
+  eta 1s
+  conf 100%
+
+act center_dropper_above[D, T]
+  D dropper
+  T visible
+  pre
+    nil
+  inv
+    see[T; at.cam=downcam]
+  post
+    see[T; at.cam=downcam] &
+    positioned[above(D, T)]
+
+act drop_dropper_above[D, T]
+  D dropper
+  T visible
+    cam = downcam
+  pre
+    nil
+  inv
+    not was(dropping[D]) &
+    see[T, at.cam=downcam] &
+    positioned[above(D, T)]
+  post
+    was(dropping[D] &
+        positioned[above(D, T)])
+  eta 1s
+  conf 80%
+
+act remove_cover_to_see[S]
+  S shape
+  pre
+    see[cover]
+  inv
+    nil
+  post
+    see[S]
+  eta 10s
+  conf 50%

@@ -1,0 +1,11 @@
+type shape = visible
+
+obj banana
+  is shape
+  is shape
+
+obj bins
+  is visible
+
+obj cover
+  is visible

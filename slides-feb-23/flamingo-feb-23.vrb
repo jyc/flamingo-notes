@@ -1,0 +1,19 @@
+\frametitle{Verifiers}
+\begin{itemize}
+\item How do we know whether an action actually succeeded?
+\item \verb|verifiable(e)| is true when \verb|e| is currently believed to be \textit{verifiable}.
+\end{itemize}
+\begin{lstlisting}
+rule position_above_tower_to_verify
+  S stack
+  if
+    positioned{Tower - Sub =
+               (|xy| < 10%fov, z > 2m, z < 3m)}
+  then
+    verifiable(removed[S])
+  p 80%
+\end{lstlisting}
+\begin{itemize}
+\item Verifiers implementations run in the background, returning whether relevant atomic formulas with \verb|true|, \verb|false|, or \verb|unknown|.
+\item When to run verifiers (how much to trust actions?) characterizes part of the behavior of the mission controller with regard to risk.
+\end{itemize}
